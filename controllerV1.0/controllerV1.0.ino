@@ -1,5 +1,5 @@
-#include <Wire.h>
-
+#include <SparkFun_MS5803_I2C.h>
+#include <Servo.h>
 
 /*
  * Underwater ROV controller
@@ -17,44 +17,80 @@
  * Tune and store in EEPROM
  */
 
-int thrusterPin[6] = {0,1,2,3,4,5};
-int pressurePin = 6;
+int thrusterPin[2] = {9,10};
 
-unsigned int currLoop = 0;
-unsigned int prevLoop = 0;
-int loopTime = 0;
-float depth = 0;
-float currentThrusterSpeed[6] = {0,0,0,0,0,0}; //u,d,l,r,f,b
-float desiredThrusterSpeed[6] = {0,0,0,0,0,0}; //u,d,l,r,f,b
-float K[3] = {0.5,0,0};
+Servo up1,up2;
+MS5803 sensor(0x76);
+
+unsigned long currLoop = 0;
+unsigned long prevLoop = 0;
+float thrusterSpeeds[2] = {1500,1500}; //uf,ub,fl,fr,bl,br
+double pressure;
+float desiredPressure = 1010;
+double pressureErrorMargin = 1.0;
 float error[3] = {0,0,0}; //p,i,d
+float k[3] = {12,0.01,0.2}; //p,i,d
+float dT = 0;
+
 
 
 void setup() {
-  for(int x = 0; x < 6; x ++){
-    pinMode(thrusterPin[x],OUTPUT);
-  }
-  pinMode(pressurePin,INPUT);
+  up1.attach(thrusterPin[0]);
+  up1.writeMicroseconds(1500); // send "stop" signal to ESC.
+  up2.attach(thrusterPin[1]);
+  up2.writeMicroseconds(1500); // send "stop" signal to ESC.
+  delay(1000);
+  sensor.reset();
+  sensor.begin();
+  Serial.begin(115200);
 }
 
-void loop() {
+void loop() { //persistentVariables[]{prevLoop,
   currLoop = millis();
   //Poll sensors (pressure and controller)
-  getDepth();
-  loopTime = currLoop - prevLoop;
+  fetch_depth();
+  
   //calculations
-  
+  calculateError();
+  dT = currLoop - prevLoop;
   //PID
-  
-  //update thrusters
+  thrusterSpeeds[0] = 1500 + k[0]*error[0] + k[1]*error[1]*dT + k[2]*(error[2]/dT);
+  thrusterSpeeds[1] = 1500 + k[0]*error[0] + k[1]*error[1]*dT + k[2]*(error[2]/dT);
+  for(int x = 0; x < 2; x++){
+    thrusterSpeeds[x] = limit(thrusterSpeeds[x],1900,1100);
+  }
+  Serial.println(); Serial.print(map(pressure,1030,1000,0,30)); //Serial.print("\t"); Serial.print(thrusterSpeeds[0]);
+  updateThrusters();
   prevLoop = currLoop;
+  //Serial.print("\t");Serial.print(dT); //current sample rate = 25ms
+  //delay(25);
+}
+
+float limit(float toLimit,int upLim,int lowLim){
+  if(toLimit>upLim){
+    return upLim;
+  }
+  else if(toLimit<lowLim){
+    return lowLim;
+  }
+  else{
+    return toLimit;
+  }
+}
+
+float fetch_depth(){
+  pressure = sensor.getPressure(ADC_4096);
+}
+
+void calculateError(){
+  float prevError = error[0];
+  error[0] = desiredPressure - pressure;
+  error[1] += error[0];
+  error[2] = error[0] - prevError;
+  //Serial.print("\t");Serial.print(error[2]);
 }
 
 void updateThrusters(){
-  //update all thruster speeds
+  up1.writeMicroseconds(int(thrusterSpeeds[0]));
+  up2.writeMicroseconds(int(thrusterSpeeds[1]));
 }
-
-void getDepth(){
-  
-}
-
