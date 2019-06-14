@@ -17,6 +17,10 @@
  * Tune and store in EEPROM
  */
 
+//////////////////////////////////////////////////
+unsigned long previousPidTime = 0;
+//////////////////////////////////////////////////
+
 int thrusterPin[2] = {9,10};
 
 Servo up1,up2;
@@ -29,7 +33,7 @@ float dT = 0;
 float thrusterSpeeds[2] = {1500,1500}; //uf,ub,fl,fr,bl,br
 
 double pressure;
-float desiredPressure = 1010;
+float desiredPressure = 1040;
 float errorDepth[3] = {0,0,0}; //p,i,d
 float kDepth[3] = {12,0.01,0.2}; //p,i,d
 
@@ -51,7 +55,16 @@ void setup() {
   Serial.begin(115200);
 }
 
-void loop() { //persistentVariables[]{prevLoop,
+void loop(){
+  test(&previousPidTime);
+  delay(10000);
+}
+
+void test(unsigned long prevTimePointer){
+  Serial.println(*prevTimePointer);
+}
+
+void runPid() { //persistentVariables[]{prevLoop,
   currLoop = millis();
   //Poll sensors (pressure and controller)
   fetch_pitch();
@@ -67,7 +80,7 @@ void loop() { //persistentVariables[]{prevLoop,
     thrusterSpeeds[x] = limit(thrusterSpeeds[x],1900,1100);
   }
   //Serial.println(); Serial.print(map(pressure,1030,1000,0,30)); //Serial.print("\t"); Serial.print(thrusterSpeeds[0]);
-  Serial.println(); Serial.print(pitch);
+  Serial.println(); Serial.print(pressure);
   updateThrusters();
   prevLoop = currLoop;
   //Serial.print("\t");Serial.print(dT); //current sample rate = 25ms
